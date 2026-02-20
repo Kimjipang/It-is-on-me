@@ -191,19 +191,32 @@ export class Physics {
     const relY = char.position.y - obs.position.y;
     const relZ = char.position.z - obs.position.z;
 
-    // Check if in gap
+    // In the gap — no collision
     if (relX >= obs.gapStart! && relX <= obs.gapEnd!) {
-      return; // In the gap, no collision
+      return;
     }
 
-    // Check AABB collision
-    if (
-      Math.abs(relX) < halfW + char.radius &&
-      Math.abs(relY) < halfH + char.radius &&
-      Math.abs(relZ) < halfD + char.radius
-    ) {
-      // Determine collision face
-      const overlapX = halfW + char.radius - Math.abs(relX);
+    // Early exit if outside vertical / depth range
+    if (Math.abs(relY) >= halfH + char.radius) return;
+    if (Math.abs(relZ) >= halfD + char.radius) return;
+
+    // Determine which solid segment the ball overlaps
+    let segLeft: number, segRight: number;
+    if (relX < obs.gapStart!) {
+      segLeft = -halfW;
+      segRight = obs.gapStart!;
+    } else {
+      segLeft = obs.gapEnd!;
+      segRight = halfW;
+    }
+
+    const segCenterX = (segLeft + segRight) / 2;
+    const segHalfW = (segRight - segLeft) / 2;
+    const segRelX = relX - segCenterX;
+
+    // AABB check against the actual solid segment
+    if (Math.abs(segRelX) < segHalfW + char.radius) {
+      const overlapX = segHalfW + char.radius - Math.abs(segRelX);
       const overlapY = halfH + char.radius - Math.abs(relY);
 
       if (overlapY < overlapX) {
@@ -213,17 +226,19 @@ export class Physics {
         if (sign > 0 && char.velocity.y < 0) {
           char.velocity.y *= -RESTITUTION * (0.7 + Math.random() * 0.3);
           char.velocity.x *= FRICTION;
-          // Push towards gap
+          // Push towards gap — minimum force so ball doesn't stall near the edge
           const gapCenter = (obs.gapStart! + obs.gapEnd!) / 2 + obs.position.x;
-          char.velocity.x += (gapCenter - char.position.x) * PLATFORM_GAP_SEEK_FORCE;
-          char.velocity.x += (Math.random() - 0.5) * 3;
+          const diff = gapCenter - char.position.x;
+          const seekMag = Math.max(Math.abs(diff) * PLATFORM_GAP_SEEK_FORCE, 1.5);
+          char.velocity.x += Math.sign(diff || 1) * seekMag;
+          char.velocity.x += (Math.random() - 0.5) * 1.5;
         } else if (sign < 0 && char.velocity.y > 0) {
           char.velocity.y *= -RESTITUTION;
         }
       } else {
-        // Horizontal collision
-        const sign = relX > 0 ? 1 : -1;
-        char.position.x = obs.position.x + sign * (halfW + char.radius);
+        // Horizontal collision — pushes ball toward the gap edge
+        const sign = segRelX > 0 ? 1 : -1;
+        char.position.x = obs.position.x + segCenterX + sign * (segHalfW + char.radius);
         char.velocity.x *= -RESTITUTION;
       }
     }
@@ -301,12 +316,26 @@ export class Physics {
       return;
     }
 
-    if (
-      Math.abs(relX) < halfW + char.radius &&
-      Math.abs(relY) < halfH + char.radius &&
-      Math.abs(relZ) < halfD + char.radius
-    ) {
-      const overlapX = halfW + char.radius - Math.abs(relX);
+    // Early exit if outside vertical / depth range
+    if (Math.abs(relY) >= halfH + char.radius) return;
+    if (Math.abs(relZ) >= halfD + char.radius) return;
+
+    // Determine which solid segment the ball overlaps
+    let segLeft: number, segRight: number;
+    if (relX < obs.gapStart!) {
+      segLeft = -halfW;
+      segRight = obs.gapStart!;
+    } else {
+      segLeft = obs.gapEnd!;
+      segRight = halfW;
+    }
+
+    const segCenterX = (segLeft + segRight) / 2;
+    const segHalfW = (segRight - segLeft) / 2;
+    const segRelX = relX - segCenterX;
+
+    if (Math.abs(segRelX) < segHalfW + char.radius) {
+      const overlapX = segHalfW + char.radius - Math.abs(segRelX);
       const overlapY = halfH + char.radius - Math.abs(relY);
 
       if (overlapY < overlapX) {
@@ -316,14 +345,17 @@ export class Physics {
           char.velocity.y *= -RESTITUTION * (0.7 + Math.random() * 0.3);
           char.velocity.x *= FRICTION;
           const gapCenter = (obs.gapStart! + obs.gapEnd!) / 2 + currentBaseX;
-          char.velocity.x += (gapCenter - char.position.x) * PLATFORM_GAP_SEEK_FORCE;
-          char.velocity.x += (Math.random() - 0.5) * 3;
+          const diff = gapCenter - char.position.x;
+          const seekMag = Math.max(Math.abs(diff) * PLATFORM_GAP_SEEK_FORCE, 1.5);
+          char.velocity.x += Math.sign(diff || 1) * seekMag;
+          char.velocity.x += (Math.random() - 0.5) * 1.5;
         } else if (sign < 0 && char.velocity.y > 0) {
           char.velocity.y *= -RESTITUTION;
         }
       } else {
-        const sign = relX > 0 ? 1 : -1;
-        char.position.x = currentBaseX + sign * (halfW + char.radius);
+        // Horizontal collision — pushes ball toward the gap edge
+        const sign = segRelX > 0 ? 1 : -1;
+        char.position.x = currentBaseX + segCenterX + sign * (segHalfW + char.radius);
         char.velocity.x *= -RESTITUTION;
       }
     }
